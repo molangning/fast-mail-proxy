@@ -1,5 +1,23 @@
-const { fs, loadEnvFileIntoProcessEnv } = require("./deps.js");
+const { fs, loadEnvFileIntoProcessEnv, crypto } = require("./deps.js");
 const { logger } = require("./logging.js");
+
+const hexStringRegex = /^[0-9A-Fa-f]+$/;
+
+function hexDecode(hexString) {
+	if (!hexString || typeof hexString !== "string") {
+		return false;
+	}
+
+	if (hexString.length % 2 !== 0) {
+		return false;
+	}
+
+	if (hexStringRegex.test(hexString)) {
+		return Buffer.from(hexString, "hex");
+	}
+
+	return false;
+}
 
 process.env.NODE_ENV = "production";
 
@@ -44,8 +62,16 @@ logger.info(`Loaded ${Object.keys(usersByAlias).length} aliases`);
 const configs = {
 	integration: process.env.INTEGRATION || "mailgun",
 	receiveEndpoint: process.env.RECEIVE_ENDPOINT || "/api/receive-mail",
-	defaultName: process.env.DEFAULT_NAME || "Unknown Sender", // For when the From header is missing the name. Not likely to happen so who knows.
-	allowOutboundMail: Boolean(process.env.ALLOW_OUTBOUND_MAIL) || false, // Allows users in user.json to send mail through the proxy. Default is receive only.
+
+	// For serverless infrastructure where disk writes are generally not allowed.
+	noDisk: Boolean(process.env.NO_DISK) || false,
+
+	// Putting the key in the env is a bad idea, however serverless infrastructure does not allow for disk writes.
+	// Key format is 64 character long hex encoded.
+	decryptKey: process.env.DECRYPT_KEY || "",
+
+	// For when the From header is missing the name. Not likely to happen so who knows.
+	defaultName: process.env.DEFAULT_NAME || "No Name",
 	mailerDomain: process.env.MAILER_DOMAIN || "",
 	mailgunApiKey: process.env.MAILGUN_API_KEY || "",
 	mailgunWebhookSigningKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY || "",
@@ -55,6 +81,21 @@ const configs = {
 
 if (!configs.mailerDomain) {
 	throw Error("Mailer domain needs to be set!");
+}
+
+if (configs.decryptKey) {
+	logger.warn(
+		"Setting your decryption key in the environment variables is a BAD IDEA. Use it ONLY IF you don't have disk write permission",
+	);
+
+	configs.decryptKey = Buffer.from(configs.decryptKey, "hex");
+} else {
+	if (fs.existsSync("key")) {
+		configs.decryptKey = hexDecode(fs.readFileSync("key", "utf-8"), "hex");
+	} else {
+		configs.decryptKey = crypto.randomBytes(64);
+		fs.writeFileSync("key", configs.decryptKey.toString("hex"));
+	}
 }
 
 module.exports = { configs, usersByAlias, usersByMail };
