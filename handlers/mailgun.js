@@ -1,12 +1,12 @@
 const { configs, usersByAlias, usersByMail } = require("../modules/configs.js");
-const { mailgun, crypto } = require("../modules/deps.js");
+const { mailgun, crypto, fs } = require("../modules/deps.js");
 const { logger } = require("../modules/logging.js");
 const {
-	parseFromField,
-	generateMessageId,
+	encryptMessageId,
+	decryptMessageId,
 	wrap,
 	unwrap,
-	unwrapForwardAddress,
+	parseAddress,
 } = require("../modules/utils.js");
 
 const mg = mailgun.client({
@@ -24,6 +24,7 @@ async function sendMail(
 	messageId,
 	inReplyTo,
 	replyTo,
+	attachments,
 ) {
 	if (!sender) {
 		throw Error("Sender arg is missing!");
@@ -49,6 +50,10 @@ async function sendMail(
 		throw Error("Message ID is missing!");
 	}
 
+	if (attachments && !Array.isArray(attachments)) {
+		throw Error("Attachments arg is not an array!");
+	}
+
 	const fields = {
 		from: sender,
 		to: to,
@@ -70,6 +75,10 @@ async function sendMail(
 
 	if (replyTo) {
 		fields["h:Reply-To"] = replyTo;
+	}
+
+	if (attachments.length > 0) {
+		fields.attachment = attachments;
 	}
 
 	await mg.messages
@@ -111,17 +120,39 @@ async function webhookHandler(req, res) {
 	const bodyHtml = req.body["body-html"] || "";
 
 	const recipients = req.body.recipient.split(",");
-	const parsedAddresses = [];
-	const proxiedAddresses = [];
+	const parsedAddresses = {};
+	const proxiedAddresses = {};
+	const attachments = [];
 
 	const originalInReplyTo = req.body["In-Reply-To"] || "";
 	const originalMessageId = req.body["Message-Id"] || "";
-	let messageId = "";
-	let inReplyTo = "";
-
-	const sender = req.body.Sender || req.body.sender; // Header shenanigans
+	const originalReplyTo = req.body["Reply-To"] || "";
+	const originalSender = req.body.Sender || req.body.sender; // Header shenanigans
 	const originalFromHeader = req.body.from || req.body.From; // Pt 2
-	const subject = req.body.subject || req.body.Subject || "";
+	const subject = req.body.subject || req.body.Subject || ""; // Pt 3
+
+	let inReplyTo = "";
+	let messageId = "";
+	const replyTo = (await parseAddress(originalReplyTo)).email || "";
+	const sender = (await parseAddress(originalSender)).email;
+	const senderFromName =
+		(await parseAddress(originalFromHeader)).name || configs.defaultName;
+
+	if (req.files && req.files.length > 0) {
+		for (let i = 0; i < req.files.length; i++) {
+			if (configs.noDisk) {
+				attachments.push({
+					filename: req.files[i].originalname,
+					data: req.files[i].buffer,
+				});
+			} else {
+				attachments.push({
+					filename: req.files[i].originalname,
+					data: await fs.promises.readFile(req.files[i].path),
+				});
+			}
+		}
+	}
 
 	// Parse addresses
 	for (let i = 0; i < recipients.length; i++) {
@@ -137,28 +168,42 @@ async function webhookHandler(req, res) {
 
 		// Check if it is in the alias, if so, lookup the email and put it in.
 		if (recipientName in usersByAlias) {
-			parsedAddresses.push(usersByAlias[recipientName]);
+			wrappedSender = await wrap(sender, recipientName); // Hard fail if we can't wrap
+			newReplyTo = "";
+
+			if (!wrappedSender) {
+				res.status(406).end("Failed wrapping sender");
+				return;
+			}
+
+			if (replyTo) {
+				newReplyTo = (await wrap(replyTo, recipientName)) || ""; // Soft fail if we can't wrap
+			}
+
+			newSenderFromHeader = `${senderFromName} <${wrappedSender}>`;
+
+			if (newSenderFromHeader in parsedAddresses) {
+				parsedAddresses[newSenderFromHeader][0].push(
+					usersByAlias[recipientName],
+				);
+			} else {
+				parsedAddresses[newSenderFromHeader] = [
+					[usersByAlias[recipientName]],
+					newReplyTo,
+				];
+			}
+
 			continue;
 		}
 
-		// Try unwrapping it as a normal address
-		unwrappedAddress = await unwrap(recipient);
-		if (unwrappedAddress) {
-			parsedAddresses.push(unwrappedAddress.destAddress);
-		}
-
-		// Check if forward proxying is enabled.
-		if (!configs.allowOutboundMail) {
-			continue;
-		}
-
+		// When we reached here, it's likely a wrapped address
 		// Check if we know the user
 		if (!(sender in usersByMail)) {
 			continue;
 		}
 
-		// Try unwrapping it as a forward address
-		unwrappedAddress = await unwrapForwardAddress(recipient);
+		// Try unwrapping it
+		unwrappedAddress = await unwrap(recipient);
 		if (!unwrappedAddress) {
 			// Failed to unwrap it as it's not a valid address
 			continue;
@@ -169,22 +214,46 @@ async function webhookHandler(req, res) {
 			unwrappedAddress.alias in usersByAlias &&
 			usersByAlias[unwrappedAddress.alias] === sender
 		) {
-			proxiedAddresses.push([
-				unwrappedAddress.alias,
-				unwrappedAddress.destAddress,
-			]);
+			newReplyTo = "";
+
+			if (replyTo) {
+				newReplyTo = (await wrap(replyTo, unwrappedAddress.alias)) || ""; // Soft fail if we can't wrap
+			}
+
+			if (unwrappedAddress.alias in proxiedAddresses) {
+				proxiedAddresses[unwrappedAddress.alias][0].push(
+					unwrappedAddress.destAddress,
+				);
+			} else {
+				proxiedAddresses[unwrappedAddress.alias] = [
+					[unwrappedAddress.destAddress],
+					newReplyTo,
+				];
+			}
 		}
 
 		// If we reached here, we don't have a valid to address and can't send the email.
 	}
 
-	// inReplyTo message id rewrite if it is the first email sent to proxy.
-	// else we reuse message id
+	// Encrypt the message id
+
+	messageId = await encryptMessageId(originalMessageId, sender);
+
+	if (!messageId) {
+		// Failed to encrypt, unrecoverable from here on.
+
+		res.status(406).end("Failed encoding message id");
+		return;
+	}
+
+	// Decrypt in reply to header if found. Send error if failed to decrypt
+
 	if (originalInReplyTo) {
-		messageId = await generateMessageId();
-		inReplyTo = originalInReplyTo;
-	} else {
-		messageId = originalMessageId;
+		inReplyTo = await decryptMessageId(originalInReplyTo, sender);
+		if (!inReplyTo) {
+			res.status(406).end("Failed decoding message id");
+			return;
+		}
 	}
 
 	// Tell mailgun we are sending the mail
@@ -192,40 +261,44 @@ async function webhookHandler(req, res) {
 
 	res.status(200).end("ok");
 
-	if (parsedAddresses.length > 0) {
-		fromName =
-			(await parseFromField(originalFromHeader)) || configs.defaultName;
-		newFromHeader = `${fromName} <${(await wrap(sender)) || sender}>`;
-
-		sendMail(
-			newFromHeader,
-			parsedAddresses,
-			subject,
-			bodyPlain,
-			bodyHtml,
-			messageId,
-			inReplyTo,
-		);
-	}
-
-	if (proxiedAddresses.length > 0) {
-		for (let i = 0; i < proxiedAddresses.length; i++) {
-			[alias, dest] = proxiedAddresses[i];
-
-			fromName =
-				alias ||
-				(await parseFromField(originalFromHeader)) ||
-				configs.defaultName;
-			newFromHeader = `${fromName} <${alias}@${configs.mailerDomain}>`;
-
+	if (Object.keys(parsedAddresses).length > 0) {
+		for (senderFromHeader in parsedAddresses) {
+			newReplyTo = parsedAddresses[senderFromHeader][1];
 			sendMail(
-				newFromHeader,
-				[dest],
+				senderFromHeader,
+				parsedAddresses[senderFromHeader][0],
 				subject,
 				bodyPlain,
 				bodyHtml,
 				messageId,
 				inReplyTo,
+				newReplyTo,
+				attachments,
+			);
+		}
+	}
+
+	if (Object.keys(proxiedAddresses).length > 0) {
+		for (alias in proxiedAddresses) {
+			dest = proxiedAddresses[alias][0];
+			newReplyTo = proxiedAddresses[alias][1];
+
+			fromName =
+				alias ||
+				(await parseAddress(originalFromHeader)).name ||
+				configs.defaultName;
+			newFromHeader = `${fromName} <${alias}@${configs.mailerDomain}>`;
+
+			sendMail(
+				newFromHeader,
+				dest,
+				subject,
+				bodyPlain,
+				bodyHtml,
+				messageId,
+				inReplyTo,
+				newReplyTo,
+				attachments,
 			);
 		}
 	}
