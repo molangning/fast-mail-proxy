@@ -10,6 +10,10 @@ transparent proxy.
 Mail can be sent as well as received through the proxy by using special
 addresses
 
+## How does it work?
+
+The directory [how-it-works](/how-it-works) explains how the proxy functions.
+
 ## Receiving
 
 To receive mail, configure `users.json` and set the alias for your email. There
@@ -19,9 +23,6 @@ All mail that gets sent to the address will be forwarded to the configured
 email.
 
 ## Sending
-
-To send mail, you need to set environment variable `ALLOW_OUTBOUND_MAIL` to
-true.
 
 The to address field will have to be modified accordingly (Check out function
 `wrap` and `unwrap` for the exact process in `modules/utils.js`)
@@ -39,20 +40,16 @@ like this
 
 `wolf_at_forrest.com_fox@proxy.com`
 
-Sending mail requires a alias as the proxy needs to know who to address.
+(Using foxes and wolfs are more cute and interesting than the overused alice and
+bob. Fight me if you don't like it.)
 
-## Caveats
+Sending mail requires a alias as the proxy needs to know who to address as well
+as to check if the sender owns the alias.
 
-Sending mail through the proxy will review your provider through message-id.
-This is unavoidable until I can find a way to patch it.
+## Future features
 
-This can be hidden by encrypting the message-id and decrypting it when it
-reaches the proxy.
+- [ ] Cloudflare workers support using cloudflare kv storage
+- [x] Generic serverless support
 
-Replying to mail that was sent through the special address (like
-`wolf_at_forrest.com_fox@proxy.com`) will result in leaking the display name
-
-This could be solved using a special reply address or extracting the alias from
-above
-
-All other headers are dropped except for the essential headers like `Reply-To`
+*Serverless support might have some issues where large attachments will cause a
+timeout.
