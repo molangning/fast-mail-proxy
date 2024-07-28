@@ -1,12 +1,28 @@
 const { logger } = require("./modules/logging.js");
 const { configs } = require("./modules/configs.js");
 
-const { attachments, express, bodyParser } = require("./modules/deps.js");
+const { express, multer, bodyParser } = require("./modules/deps.js");
 const { cleanUpAttachmentsMiddleware } = require("./modules/utils.js");
 
 const { webhookValidator, webhookHandler } = require(
 	`./handlers/${configs.integration}.js`,
 );
+
+const multerOptions = {
+	limits: {
+		fieldSize: 5 * 1024 * 1024, // 5 MB
+		fileSize: 25 * 1024 * 1024, // 25 MB, any larger and it might as well be a dos attack
+		files: 10,
+	},
+};
+
+if (configs.noDisk) {
+	multerOptions.storage = multer.memoryStorage();
+} else {
+	multerOptions.dest = "tmp/";
+}
+
+const attachments = multer(multerOptions);
 
 const app = express();
 
@@ -23,7 +39,7 @@ app.post(
 
 // Sinkholes all other requests
 
-app.all("*", async (req, res) => {
+app.all("*", (req, res) => {
 	res.status(404).end();
 });
 

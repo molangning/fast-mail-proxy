@@ -17,14 +17,6 @@ const mailgun = new Mailgun(formData);
 const express = require("express");
 const multer = require("multer");
 const bodyParser = require("body-parser");
-const attachments = multer({
-	dest: "tmp/",
-	limits: {
-		fieldSize: 5 * 1024 * 1024, // 5 MB
-		fileSize: 25 * 1024 * 1024, // 25 MB, any larger and it might as well be a dos attack
-		files: 10,
-	},
-});
 
 module.exports = {
 	fs,
@@ -34,5 +26,5 @@ module.exports = {
 	bodyParser,
 	mailgun,
 	express,
-	attachments,
+	multer,
 };
