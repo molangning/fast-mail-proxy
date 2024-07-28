@@ -1,13 +1,18 @@
 # Ignore temp attachments
+
 tmp/*
-# Keep folder
+
+# Keep temp folder
+
 !tmp/.gitkeep 
 
-# Ignore users.json
-users.json
+# Ignore encryption key
 
-# Test file
-test.js
+key
+
+# Ignore users.json
+
+users.json
 
 # Logs
 
