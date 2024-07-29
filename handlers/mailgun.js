@@ -172,6 +172,7 @@ async function webhookHandler(req, res) {
 			newReplyTo = "";
 
 			if (!wrappedSender) {
+				logger.error("Failed to wrap sender address!");
 				res.status(406).end("Failed wrapping sender");
 				return;
 			}
@@ -242,7 +243,8 @@ async function webhookHandler(req, res) {
 	if (!messageId) {
 		// Failed to encrypt, unrecoverable from here on.
 
-		res.status(406).end("Failed encoding message id");
+		logger.error("Failed to encrypt incoming mail's message id!");
+		res.status(406).end("Failed to encode message id");
 		return;
 	}
 
@@ -251,7 +253,8 @@ async function webhookHandler(req, res) {
 	if (originalInReplyTo) {
 		inReplyTo = await decryptMessageId(originalInReplyTo, sender);
 		if (!inReplyTo) {
-			res.status(406).end("Failed decoding message id");
+			logger.error("Failed to decrypt inReplyTo message id!");
+			res.status(406).end("Failed to decode message id");
 			return;
 		}
 	}
