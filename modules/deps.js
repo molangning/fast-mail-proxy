@@ -18,6 +18,25 @@ const express = require("express");
 const multer = require("multer");
 const bodyParser = require("body-parser");
 
+// Custom hexDecode function
+const hexStringRegex = /^[0-9A-Fa-f]+$/;
+
+function hexDecode(hexString) {
+	if (!hexString || typeof hexString !== "string") {
+		return false;
+	}
+
+	if (hexString.length % 2 !== 0) {
+		return false;
+	}
+
+	if (hexStringRegex.test(hexString)) {
+		return Buffer.from(hexString, "hex");
+	}
+
+	return false;
+}
+
 module.exports = {
 	fs,
 	crypto,
@@ -27,4 +46,5 @@ module.exports = {
 	mailgun,
 	express,
 	multer,
+	hexDecode,
 };

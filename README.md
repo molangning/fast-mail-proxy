@@ -10,11 +10,63 @@ transparent proxy.
 Mail can be sent as well as received through the proxy by using special
 addresses
 
+## Backstory
+
+A while back, I was excited to use cloudflare's mail forwarding, however, when I
+used it, I discovered that it can only forward mail and not act as a true proxy.
+Sending mail through it and keeping anonymity while replying was impossible.
+
+This was an issue for me as I wanted something privacy preserving like duck's
+email proxy, where mail can be sent through the proxy and be sent out under a
+vanity address.
+
+This project is a implementation of what I hope that I could get from
+cloudflare's email forwarding service, as well as the ability to semi self host
+a email proxy service.
+
+## Setting up
+
+Fast Mail Proxy can accept any kind of mail, as long as the relevant handlers
+are defined. The current default handler is mailgun.
+
+## Options
+
+### Server options
+
+`INTEGRATION`: The handler to load, defaults to `mailgun`
+
+`RECEIVE_ENDPOINT`: The webhook's listening endpoint, defaults to
+`/api/receive-mail`
+
+`NO_DISK`: Disable disk writes, defaults to false,
+
+`DECRYPT_KEY`: Server's decryption key in hex format. Usually set if there isn't
+disk write access.
+
+`DEFAULT_NAME`: Sender's default name if the script fails to extract it.
+Defaults to `No Name`
+
+`MAILER_DOMAIN`: The domain in which mail is configured to be sent from. Must be
+set.
+
+### Mailgun options
+
+Most keys can be found
+[in this article by mailgun]("https://help.mailgun.com/hc/en-us/articles/203380100-Where-can-I-find-my-API-keys-and-SMTP-credentials")
+
+`MAILGUN_API_KEY`: Mailgun's api key
+
+`MAILGUN_WEBHOOK_SIGNING_KEY`: Mailgun webhook signing key, used for
+verification.
+
+`MAILGUN_API_ENDPOINT`: Mailgun's api endpoint, change if your account is in
+europe. Default is https://api.mailgun.net
+
 ## How does it work?
 
 The directory [how-it-works](/how-it-works) explains how the proxy functions.
 
-## Receiving
+### Receiving
 
 To receive mail, configure `users.json` and set the alias for your email. There
 is an example file in `users.json.sample`
@@ -22,7 +74,7 @@ is an example file in `users.json.sample`
 All mail that gets sent to the address will be forwarded to the configured
 email.
 
-## Sending
+### Sending
 
 The to address field will have to be modified accordingly (Check out function
 `wrap` and `unwrap` for the exact process in `modules/utils.js`)

@@ -1,24 +1,10 @@
-const { fs, loadEnvFileIntoProcessEnv, crypto } = require("./deps.js");
+const {
+	fs,
+	loadEnvFileIntoProcessEnv,
+	crypto,
+	hexDecode,
+} = require("./deps.js");
 const { logger } = require("./logging.js");
-
-const hexStringRegex = /^[0-9A-Fa-f]+$/;
-
-// Prevent circular dependency.
-function hexDecode(hexString) {
-	if (!hexString || typeof hexString !== "string") {
-		return false;
-	}
-
-	if (hexString.length % 2 !== 0) {
-		return false;
-	}
-
-	if (hexStringRegex.test(hexString)) {
-		return Buffer.from(hexString, "hex");
-	}
-
-	return false;
-}
 
 process.env.NODE_ENV = "production";
 
@@ -74,6 +60,8 @@ const configs = {
 	// For when the From header is missing the name. Not likely to happen so who knows.
 	defaultName: process.env.DEFAULT_NAME || "No Name",
 	mailerDomain: process.env.MAILER_DOMAIN || "",
+
+	// Here comes the mailgun options
 	mailgunApiKey: process.env.MAILGUN_API_KEY || "",
 	mailgunWebhookSigningKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY || "",
 	mailgunApiEndpoint:
@@ -89,7 +77,7 @@ if (configs.decryptKey) {
 		"Setting your decryption key in the environment variables is a BAD IDEA. Use it ONLY IF you don't have disk write permission",
 	);
 
-	configs.decryptKey = Buffer.from(configs.decryptKey, "hex");
+	configs.decryptKey = hexDecode(configs.decryptKey);
 } else {
 	if (fs.existsSync("key")) {
 		configs.decryptKey = hexDecode(fs.readFileSync("key", "utf-8"), "hex");
@@ -97,6 +85,10 @@ if (configs.decryptKey) {
 		configs.decryptKey = crypto.randomBytes(64);
 		fs.writeFileSync("key", configs.decryptKey.toString("hex"));
 	}
+}
+
+if (!configs.decryptKey) {
+	throw Error("Failed to decode decryptKey!");
 }
 
 module.exports = { configs, usersByAlias, usersByMail };

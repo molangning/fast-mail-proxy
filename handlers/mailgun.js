@@ -1,5 +1,5 @@
 const { configs, usersByAlias, usersByMail } = require("../modules/configs.js");
-const { mailgun, crypto, fs } = require("../modules/deps.js");
+const { mailgun, crypto, fs, hexDecode } = require("../modules/deps.js");
 const { logger } = require("../modules/logging.js");
 const {
 	encryptMessageId,
@@ -7,7 +7,6 @@ const {
 	wrap,
 	unwrap,
 	parseAddress,
-	hexDecode,
 } = require("../modules/utils.js");
 
 const mg = mailgun.client({
@@ -96,7 +95,7 @@ async function webhookValidator(req, res, next) {
 
 	const token = req.body.token;
 	const timestamp = req.body.timestamp;
-	const signature = (await hexDecode(req.body.signature)) || "";
+	const signature = hexDecode(req.body.signature) || "";
 
 	if (!timestamp || !signature || !token) {
 		res.status(404).end("");
