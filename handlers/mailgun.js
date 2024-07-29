@@ -7,6 +7,7 @@ const {
 	wrap,
 	unwrap,
 	parseAddress,
+	hexDecode,
 } = require("../modules/utils.js");
 
 const mg = mailgun.client({
@@ -95,7 +96,7 @@ async function webhookValidator(req, res, next) {
 
 	const token = req.body.token;
 	const timestamp = req.body.timestamp;
-	const signature = req.body.signature;
+	const signature = (await hexDecode(req.body.signature)) || "";
 
 	if (!timestamp || !signature || !token) {
 		res.status(404).end("");
@@ -105,9 +106,9 @@ async function webhookValidator(req, res, next) {
 	const encodedToken = crypto
 		.createHmac("sha256", configs.mailgunWebhookSigningKey)
 		.update(timestamp + token)
-		.digest("hex");
+		.digest();
 
-	if (encodedToken === signature) {
+	if (crypto.timingSafeEqual(encodedToken, signature)) {
 		await next();
 		return;
 	}

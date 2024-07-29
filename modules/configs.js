@@ -3,6 +3,7 @@ const { logger } = require("./logging.js");
 
 const hexStringRegex = /^[0-9A-Fa-f]+$/;
 
+// Prevent circular dependency.
 function hexDecode(hexString) {
 	if (!hexString || typeof hexString !== "string") {
 		return false;
