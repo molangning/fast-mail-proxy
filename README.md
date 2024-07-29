@@ -29,6 +29,21 @@ a email proxy service.
 Fast Mail Proxy can accept any kind of mail, as long as the relevant handlers
 are defined. The current default handler is mailgun.
 
+### Non serverless environments
+
+Edit users.json and you are good to go!
+
+### Serverless environments
+
+Users need to be set manually by pushing to kv storage.
+
+`NO_DISK` as well as `DECRYPT_KEY` needs to be set as well.
+
+To create and namespace, check out this piece of
+[documentation by cloudflare](https://developers.cloudflare.com/kv/get-started/#2-create-a-kv-namespace)
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Sh4yy/cloudflare-email)
+
 ## Options
 
 ### Server options
