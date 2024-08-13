@@ -265,7 +265,7 @@ async function webhookHandler(req, res) {
 	res.status(200).end("ok");
 
 	if (Object.keys(parsedAddresses).length > 0) {
-		for (senderFromHeader in parsedAddresses) {
+		for (const senderFromHeader in parsedAddresses) {
 			newReplyTo = parsedAddresses[senderFromHeader][1];
 			sendMail(
 				senderFromHeader,
@@ -282,7 +282,7 @@ async function webhookHandler(req, res) {
 	}
 
 	if (Object.keys(proxiedAddresses).length > 0) {
-		for (alias in proxiedAddresses) {
+		for (const alias in proxiedAddresses) {
 			dest = proxiedAddresses[alias][0];
 			newReplyTo = proxiedAddresses[alias][1];
 
